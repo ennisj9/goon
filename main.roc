@@ -27,8 +27,8 @@ main =
 
 callGitStatus =
     output =
-        Cmd.new gitExec
-            |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
+        Cmd.new gitExec # |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
+            |> Cmd.args ["log", "--pretty=[%h] %an: %s"]
             |> Cmd.output
             |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
     output.stdout
@@ -52,18 +52,23 @@ callGitStatus =
 #             R    renamed in work tree
 #             C    copied in work tree
 # -------------------------------------------------
-# M Changed
-# T Type changed
-# A Added
-# D Deleted
-# R Renamed
-# C Copied
+# M Changed        Change
+# T Type changed   Type
+# A Added          Add
+# D Deleted        Delete
+# R Renamed        Rename
+# C Copied         Copy
+# . Unchanged
 #
 # MTARC in index means it's "in', bout to be committed
 # if work tree is "unchanged", it's the same as the index
+# Green - indexState: MTARC + workTreeState: Unchanged
+
+# Add / changed
+# Delete / added
 
 GitFile : [Tracked TrackedFile, Untracked UntrackedFile]
-FileState : [Changed, TypeChanged, Added, Deleted, Renamed, Copied, Unchanged]
+FileState : [Changed, TypeChanged, Added, Deleted, Renamed, Copied, Not]
 
 TrackedFile : { filename : Str, indexState : FileState, workTreeState : FileState }
 UntrackedFile : { filename : Str }
