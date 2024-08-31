@@ -2,21 +2,20 @@ app [main] {
     pf: platform "https://github.com/roc-lang/basic-cli/releases/download/0.14.0/dC5ceT962N_4jmoyoffVdphJ_4GlW3YMhAPyGPr-nU0.tar.br",
     parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.7.1/MvLlME9RxOBjl0QCxyn3LIaoG9pSlaNxCa-t3BfbPNc.tar.br",
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.1/jozYCvOqoYa-cV6OdTcxw3uDGn61cLvzr5dK1iKf1ag.tar.br",
+    ansi: "https://github.com/lukewilliamboswell/roc-ansi/releases/download/0.5/1JOFFXrqOrdoINq6C4OJ8k3UK0TJhgITLbcOb-6WMwY.tar.br",
 }
 
 import pf.Stdout
 import pf.Cmd
 import pf.Task exposing [Task]
-import json.Json
+import CommitLog exposing [queryCommitLog, displayCommitLogs]
+import ansi.Core
 
 gitExec = "/usr/bin/git"
 
 main =
-    queryCommitLog! gitExec
-        |> Encode.toBytes Json.utf8
-        |> Str.fromUtf8
-        |> Result.withDefault "Couldn't read JSON"
-
+    outpuLogsAndStatus! gitExec
+        |> Stdout.write
 # execExample = Cmd.exec "echo" ["EXEC"]
 
 # stadus
@@ -29,16 +28,42 @@ main =
 # stadus from <branch> <tag> == git checkout <branch> -- <file>
 # status syncmain == git checkout main && git fetch main && git reset --hard
 
+outpuLogsAndStatus = \git ->
+    commitLogs = queryCommitLog! git |> displayCommitLogs |> Core.withFg (Standard Cyan)
+    status = callGitStatus! git
+    [commitLogs, status]
+    |> Str.joinWith "\n"
+    |> Task.ok
+
+truncateStr = \str, maxLength -> # s
+    if maxLength < 3 then
+        "..."
+    else
+        asBytes = Str.toUtf8 str
+        if List.len asBytes <= maxLength then
+            str
+        else
+            asBytes
+            |> List.sublist { start: 0, len: maxLength - 3 }
+            |> \bytes ->
+                Str.fromUtf8 bytes
+                |> Result.withDefault str
+                |> Str.concat "..."
+
+expect truncateStr "some text" 9 == "some text"
+expect truncateStr "some text" 7 == "some..."
+expect truncateStr "some text" 3 == "..."
+expect truncateStr "some text" 0 == "..."
+
 callGitStatus = \git ->
     Cmd.new git
-        |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
+        |> Cmd.args ["status", "--porcelain", "--branch", "--untracked-files=all"]
         |> Cmd.output
         |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
         |> .stdout
         |> Str.fromUtf8
         |> Result.withDefault "Couldn't parse git status as Utf8"
-        |> Stdout.write
-        |> Task.mapErr \_ -> GitStatusFailed "Error writing to stdout"
+        |> Task.ok
 
 # X          Y     Meaning
 # -------------------------------------------------
@@ -71,56 +96,14 @@ callGitStatus = \git ->
 # Add / changed
 # Delete / added
 
-GitFile : [Tracked TrackedFile, Untracked UntrackedFile]
 FileState : [Changed, TypeChanged, Added, Deleted, Renamed, Copied, Not]
 
-TrackedFile : { filename : Str, indexState : FileState, workTreeState : FileState }
-UntrackedFile : { filename : Str }
+GitStatus : { branch : Str, remoteBranch : Str, files : List FileStatus }
+FileStatus : { filename : Str, indexState : FileState, workTreeState : FileState }
 
-CommitLog : { hash : Str, shortDateTime : Str, author : Str, message : Str }
-
-queryCommitLog : Str -> Task (List CommitLog) [GitStatusFailed Str]
-queryCommitLog = \git ->
-    Cmd.new git # |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
-        |> Cmd.args ["log", "--pretty=%h|%ad|%an|%s", "--date=format:%m/%d %H:%M", "-3"]
-        |> Cmd.output
-        |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
-        |> .stdout
-        |> Str.fromUtf8
-        |> Result.withDefault ""
-        |> parseCommitLog
-        |> Task.ok
-
-parseCommitLog : Str -> List CommitLog
-parseCommitLog = \logs ->
-    Str.split logs "\n"
-    |> List.map \line ->
-        parts = Str.split line "|"
-        {
-            hash: Result.withDefault (List.get parts 0) "",
-            shortDateTime: Result.withDefault (List.get parts 1) "",
-            author: Result.withDefault (List.get parts 2) "",
-            message: Result.withDefault (List.get parts 3) "",
-        }
-
-expect
-    parseCommitLog "aae83c5|08/23 10:06|Joe Ennis|more git research\nblah"
-    == [
-        {
-            hash: "aae83c5",
-            shortDateTime: "08/23 10:06",
-            author: "Joe Ennis",
-            message: "more git research",
-        },
-        {
-            hash: "blah",
-            shortDateTime: "",
-            author: "",
-            message: "",
-        },
-    ]
-
-parseStatus : List u8 -> List GitFile
+# parseStatus : Str -> GitStatus
+# parseStatus = \str ->
+#    { before, after } = Str.splitFirst str "\n"
 
 getPath : Str -> Result Str [NotFound]
 getPath = \envVariables ->
