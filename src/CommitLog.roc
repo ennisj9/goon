@@ -37,12 +37,15 @@ displayCommitLogs = \logs ->
             else
                 log.hash
         author = Core.withFg log.author (Standard Cyan)
+        authorAndMessage =
+            Str.joinWith [author, ": ", log.message] ""
+            |> truncateStr 65
+
         parts = [
             index,
             hash,
             log.shortDateTime,
-            Str.concat author ":",
-            log.message |> truncateStr 40,
+            authorAndMessage,
         ]
         Str.joinWith parts " "
     |> Str.joinWith "\n"
