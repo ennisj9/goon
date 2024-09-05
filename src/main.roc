@@ -3,20 +3,29 @@ app [main] {
     parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.7.1/MvLlME9RxOBjl0QCxyn3LIaoG9pSlaNxCa-t3BfbPNc.tar.br",
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.1/jozYCvOqoYa-cV6OdTcxw3uDGn61cLvzr5dK1iKf1ag.tar.br",
     ansi: "https://github.com/lukewilliamboswell/roc-ansi/releases/download/0.5/1JOFFXrqOrdoINq6C4OJ8k3UK0TJhgITLbcOb-6WMwY.tar.br",
+    random: "https://github.com/JanCVanB/roc-random/releases/download/v0.1.3/YfNiz9trKhsdZ7w_MdzfxW0U01Pw2iSzbrRfcIXhYPM.tar.br",
 }
 
 import pf.Stdout
 import pf.Cmd
 import pf.Task exposing [Task]
+import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
-import ansi.Core
+import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel]
+import FileTag exposing [nextTag, initialTag]
+import Storage exposing [writeStadusFile, readStadusFile, FileTags]
 
 gitExec = "/usr/bin/git"
 
+File : { filepath : Str, status : FileStatus, tag : Str }
+
+# main =
+#     queryGitStatus! gitExec
+#         |> Inspect.toStr
+#         |> Stdout.write
 main =
-    outpuLogsAndStatus! gitExec
+    runStatus! gitExec
         |> Stdout.write
-# execExample = Cmd.exec "echo" ["EXEC"]
 
 # stadus
 # stadus discard <tag>  == git restore <file>
@@ -29,41 +38,71 @@ main =
 # status syncmain == git checkout main && git fetch main && git reset --hard
 
 outpuLogsAndStatus = \git ->
-    commitLogs = queryCommitLog! git |> displayCommitLogs |> Core.withFg (Standard Cyan)
-    status = callGitStatus! git
-    [commitLogs, status]
+    commitLogs = queryCommitLog! git
+    status = queryGitStatus! git
+    [displayCommitLogs commitLogs, Inspect.toStr status]
     |> Str.joinWith "\n"
     |> Task.ok
 
-truncateStr = \str, maxLength -> # s
-    if maxLength < 3 then
-        "..."
+runStatus = \git ->
+    commitLogs = queryCommitLog! git
+    gitStatus = queryGitStatus! git
+    savedFileTags = readStadusFile! {}
+    taggedFiles = tagStatusFiles savedFileTags gitStatus.files
+    logDisplay = displayCommitLogs commitLogs
+    fileDisplay = displayFiles taggedFiles
+    Task.ok (Str.concat (Str.joinWith [logDisplay, fileDisplay] "\n\n") "\n")
+
+tagStatusFiles : FileTags, List FileWithStatus -> List File
+tagStatusFiles = \savedFiledTags, files ->
+    savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
+    context = List.walk savedFiledTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
+        byFilepath: Dict.insert byFilepath filepath tag,
+        usedTags: Set.insert usedTags tag,
+    }
+    filesState = { results: [], currentTag: initialTag }
+    List.walk files filesState \{ results, currentTag }, { filepath, status } ->
+        { tagValue, tagState } =
+            when Dict.get context.byFilepath filepath is
+                Ok existing -> { tagValue: existing, tagState: currentTag }
+                Err KeyNotFound ->
+                    newTag = firstUnusedTag currentTag context.usedTags
+                    { tagValue: newTag.str, tagState: newTag }
+        { results: List.append results { filepath, status, tag: tagValue }, currentTag: tagState }
+    |> .results
+
+displayFiles : List File -> Str
+displayFiles = \files ->
+    buckets = { staged: [], mixed: [], workTree: [] }
+    printTag = \tag -> Color.withFg tag (Standard Cyan)
+    { staged, mixed, workTree } = List.walk files buckets \state, { filepath, status, tag } ->
+        when status.indexState is
+            Unchanged ->
+                workTreeLabel = Color.withFg (fileStateToLabel status.workTreeState) (Standard Red)
+                str = Str.joinWith [printTag tag, workTreeLabel, filepath] " "
+                { state & workTree: List.append state.workTree str }
+
+            _ ->
+                indexLabel = Color.withFg (fileStateToLabel status.indexState) (Standard Green)
+                when status.workTreeState is
+                    Unchanged ->
+                        str = Str.joinWith [printTag tag, indexLabel, filepath] " "
+                        { state & staged: List.append state.staged str }
+
+                    _ ->
+                        workTreeLabel = Color.withFg (fileStateToLabel status.workTreeState) (Standard Yellow)
+                        first = Str.joinWith [printTag tag, indexLabel, filepath] " "
+                        second = Str.joinWith ["   ", workTreeLabel, filepath] " "
+                        { state & mixed: List.concat state.mixed [first, second] }
+    join = \bucket -> Str.joinWith bucket "\n"
+    join (List.dropIf [join staged, join mixed, join workTree] \x -> x == "")
+
+firstUnusedTag = \currentTag, usedTags ->
+    newTag = nextTag currentTag
+    if !(Set.contains usedTags newTag.str) then
+        newTag
     else
-        asBytes = Str.toUtf8 str
-        if List.len asBytes <= maxLength then
-            str
-        else
-            asBytes
-            |> List.sublist { start: 0, len: maxLength - 3 }
-            |> \bytes ->
-                Str.fromUtf8 bytes
-                |> Result.withDefault str
-                |> Str.concat "..."
-
-expect truncateStr "some text" 9 == "some text"
-expect truncateStr "some text" 7 == "some..."
-expect truncateStr "some text" 3 == "..."
-expect truncateStr "some text" 0 == "..."
-
-callGitStatus = \git ->
-    Cmd.new git
-        |> Cmd.args ["status", "--porcelain", "--branch", "--untracked-files=all"]
-        |> Cmd.output
-        |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
-        |> .stdout
-        |> Str.fromUtf8
-        |> Result.withDefault "Couldn't parse git status as Utf8"
-        |> Task.ok
+        firstUnusedTag newTag usedTags
 
 # X          Y     Meaning
 # -------------------------------------------------
@@ -95,11 +134,6 @@ callGitStatus = \git ->
 
 # Add / changed
 # Delete / added
-
-FileState : [Changed, TypeChanged, Added, Deleted, Renamed, Copied, Not]
-
-GitStatus : { branch : Str, remoteBranch : Str, files : List FileStatus }
-FileStatus : { filename : Str, indexState : FileState, workTreeState : FileState }
 
 # parseStatus : Str -> GitStatus
 # parseStatus = \str ->

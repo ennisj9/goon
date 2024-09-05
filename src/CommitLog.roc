@@ -7,7 +7,7 @@ module [
 import Util exposing [truncateStr]
 import pf.Cmd
 import pf.Task exposing [Task]
-import ansi.Core
+import ansi.Core as Color
 
 CommitLog : { hash : Str, shortDateTime : Str, author : Str, message : Str }
 
@@ -28,15 +28,15 @@ displayCommitLogs = \logs ->
     List.mapWithIndex logs \log, i ->
         index =
             if i == 0 then
-                "__" |> Core.withFg (Standard Green)
+                Color.withFg "__" (Standard Green)
             else
                 0 - (Num.toI8 i) |> Num.toStr
         hash =
             if i == 0 then
-                Core.withFg log.hash (Standard Green)
+                Color.withFg log.hash (Standard Green)
             else
                 log.hash
-        author = Core.withFg log.author (Standard Cyan)
+        author = Color.withFg log.author (Standard Yellow)
         authorAndMessage =
             Str.joinWith [author, ": ", log.message] ""
             |> truncateStr 65
