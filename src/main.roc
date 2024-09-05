@@ -1,5 +1,5 @@
 app [main] {
-    pf: platform "https://github.com/roc-lang/basic-cli/releases/download/0.14.0/dC5ceT962N_4jmoyoffVdphJ_4GlW3YMhAPyGPr-nU0.tar.br",
+    pf: platform "https://github.com/roc-lang/basic-cli/releases/download/0.15.0/SlwdbJ-3GR7uBWQo6zlmYWNYOxnvo8r6YABXD-45UOw.tar.br",
     parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.7.1/MvLlME9RxOBjl0QCxyn3LIaoG9pSlaNxCa-t3BfbPNc.tar.br",
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.1/jozYCvOqoYa-cV6OdTcxw3uDGn61cLvzr5dK1iKf1ag.tar.br",
     ansi: "https://github.com/lukewilliamboswell/roc-ansi/releases/download/0.5/1JOFFXrqOrdoINq6C4OJ8k3UK0TJhgITLbcOb-6WMwY.tar.br",
@@ -8,10 +8,9 @@ app [main] {
 
 import pf.Stdout
 import pf.Cmd
-import pf.Task exposing [Task]
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
-import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel]
+import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
 import FileTag exposing [nextTag, initialTag]
 import Storage exposing [writeStadusFile, readStadusFile, FileTags]
 
@@ -49,9 +48,10 @@ runStatus = \git ->
     gitStatus = queryGitStatus! git
     savedFileTags = readStadusFile! {}
     taggedFiles = tagStatusFiles savedFileTags gitStatus.files
+    branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
     fileDisplay = displayFiles taggedFiles
-    Task.ok (Str.concat (Str.joinWith [logDisplay, fileDisplay] "\n\n") "\n")
+    Task.ok (Str.concat (Str.joinWith [branchDisplay, logDisplay, fileDisplay] "\n") "\n")
 
 tagStatusFiles : FileTags, List FileWithStatus -> List File
 tagStatusFiles = \savedFiledTags, files ->
@@ -70,6 +70,26 @@ tagStatusFiles = \savedFiledTags, files ->
                     { tagValue: newTag.str, tagState: newTag }
         { results: List.append results { filepath, status, tag: tagValue }, currentTag: tagState }
     |> .results
+
+displayBranches : { localBranch: GitBranch, remoteBranch: [None, Some GitBranch] }* -> Str
+displayBranches = \{ localBranch, remoteBranch } ->
+    local = displayBranch localBranch
+    when remoteBranch is
+        None -> local
+        Some branch ->
+            remote = displayBranch branch
+            Str.joinWith [local, "->", remote] " "
+
+displayBranch : GitBranch -> Str
+displayBranch = \{name, offset} ->
+    if offset |> Num.isGt 0 then
+        offsetStr = Color.withFg (Str.concat "+" (Num.toStr offset)) (Standard Yellow)
+        Str.concat name offsetStr
+    else if offset |> Num.isLt 0 then
+        offsetStr = Color.withFg (Str.concat "-" (Num.toStr offset)) (Standard Red)
+        Str.concat name offsetStr
+    else
+        name
 
 displayFiles : List File -> Str
 displayFiles = \files ->
@@ -149,5 +169,3 @@ takeAfter : Str, Str -> Result Str [NotFound]
 takeAfter = \str, seperator ->
     Str.splitFirst str seperator
     |> Result.map .after
-
-expect getPath "ONE=blah\nPATH=some/path\nANOTHER=this" == Ok "some/path"

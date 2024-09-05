@@ -6,7 +6,6 @@ module [
 
 import Util exposing [truncateStr]
 import pf.Cmd
-import pf.Task exposing [Task]
 import ansi.Core as Color
 
 CommitLog : { hash : Str, shortDateTime : Str, author : Str, message : Str }

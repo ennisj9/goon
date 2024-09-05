@@ -6,7 +6,6 @@ module [
 
 import json.Json
 import pf.File
-import pf.Task exposing [Task]
 
 FileTags : List { filepath : Str, tag : Str }
 

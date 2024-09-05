@@ -3,10 +3,10 @@ module [
     FileWithStatus,
     FileStatus,
     fileStateToLabel,
+    GitBranch
 ]
 
 import pf.Cmd
-import pf.Task exposing [Task]
 
 FileState : [Changed, Unchanged, TypeChanged, Added, Deleted, Renamed, Copied]
 
