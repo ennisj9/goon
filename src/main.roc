@@ -8,13 +8,16 @@ app [main] {
 
 import pf.Stdout
 import pf.Cmd
+import pf.Arg
+import pf.Env
+import pf.Dir
+import pf.Path exposing [Path]
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
 import FileTag exposing [nextTag, initialTag]
 import Storage exposing [writeStadusFile, readStadusFile, FileTags]
-
-gitExec = "/usr/bin/git"
+import GitEnvironment exposing [findGitFolderPath, findGitExecutablePath]
 
 File : { filepath : Str, status : FileStatus, tag : Str }
 
@@ -22,9 +25,20 @@ File : { filepath : Str, status : FileStatus, tag : Str }
 #     queryGitStatus! gitExec
 #         |> Inspect.toStr
 #         |> Stdout.write
+#main =
+#    findGitFolderPath! {}
+#    |> Path.display
+#    |> Stdout.write
+
 main =
-    runStatus! gitExec
-        |> Stdout.write
+    gitExec = findGitExecutablePath! {}
+    dotGit = findGitFolderPath! {}
+    status = runStatus! gitExec dotGit
+    Str.joinWith [gitExec, Path.display dotGit, status, "\n"] "\n"
+    |> Stdout.write
+
+
+
 
 # stadus
 # stadus discard <tag>  == git restore <file>
@@ -36,17 +50,12 @@ main =
 # stadus from <branch> <tag> == git checkout <branch> -- <file>
 # status syncmain == git checkout main && git fetch main && git reset --hard
 
-outpuLogsAndStatus = \git ->
-    commitLogs = queryCommitLog! git
-    status = queryGitStatus! git
-    [displayCommitLogs commitLogs, Inspect.toStr status]
-    |> Str.joinWith "\n"
-    |> Task.ok
 
-runStatus = \git ->
+runStatus = \git, dotGitPath ->
     commitLogs = queryCommitLog! git
     gitStatus = queryGitStatus! git
-    savedFileTags = readStadusFile! {}
+    savedFileTags = Task.attempt! (readStadusFile dotGitPath) \res ->
+        Task.ok (Result.withDefault res [])
     taggedFiles = tagStatusFiles savedFileTags gitStatus.files
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
@@ -83,10 +92,10 @@ displayBranches = \{ localBranch, remoteBranch } ->
 displayBranch : GitBranch -> Str
 displayBranch = \{name, offset} ->
     if offset |> Num.isGt 0 then
-        offsetStr = Color.withFg (Str.concat "+" (Num.toStr offset)) (Standard Yellow)
+        offsetStr = Color.withFg (Str.concat " +" (Num.toStr offset)) (Standard Yellow)
         Str.concat name offsetStr
     else if offset |> Num.isLt 0 then
-        offsetStr = Color.withFg (Str.concat "-" (Num.toStr offset)) (Standard Red)
+        offsetStr = Color.withFg (Str.concat " -" (Num.toStr offset)) (Standard Red)
         Str.concat name offsetStr
     else
         name

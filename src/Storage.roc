@@ -6,6 +6,7 @@ module [
 
 import json.Json
 import pf.File
+import pf.Path exposing [Path]
 
 FileTags : List { filepath : Str, tag : Str }
 
@@ -15,10 +16,12 @@ writeStadusFile = \files ->
     File.writeBytes ".git/stadus.json" content
         |> Task.mapErr! \_ -> WriteFileErr "Couldn't write .git/stadus.json"
 
-readStadusFile : {} -> Task FileTags [ReadFileErr Str, DecodeFileErr Str]
-readStadusFile = \{} ->
+readStadusFile : Path -> Task FileTags [ReadFileErr Str, DecodeFileErr Str]
+readStadusFile = \dotGit ->
+    filename = Str.concat (Path.display dotGit) "/stadus.json"
+    dbg filename
     decoded =
-        File.readBytes ".git/stadus.json"
+        File.readBytes filename
             |> Task.mapErr! \_ -> ReadFileErr "Coudn't read .git/stadus.json"
             |> Decode.fromBytes Json.utf8
 
