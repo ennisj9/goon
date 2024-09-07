@@ -7,11 +7,7 @@ app [main] {
 }
 
 import pf.Stdout
-import pf.Cmd
-import pf.Arg
-import pf.Env
-import pf.Dir
-import pf.Path exposing [Path]
+import pf.Path
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
@@ -56,29 +52,35 @@ runStatus = \git, dotGitPath ->
     gitStatus = queryGitStatus! git
     savedFileTags = Task.attempt! (readStadusFile dotGitPath) \res ->
         Task.ok (Result.withDefault res [])
-    taggedFiles = tagStatusFiles savedFileTags gitStatus.files
+
+    { currentFiles, allFiles } = tagStatusFiles savedFileTags gitStatus.files
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
-    fileDisplay = displayFiles taggedFiles
+    fileDisplay = displayFiles currentFiles
     Task.ok (Str.concat (Str.joinWith [branchDisplay, logDisplay, fileDisplay] "\n") "\n")
 
-tagStatusFiles : FileTags, List FileWithStatus -> List File
-tagStatusFiles = \savedFiledTags, files ->
+
+
+tagStatusFiles : FileTags, List FileWithStatus -> {currentFiles: List File, allFiles: List File, currentTag: Tag}
+tagStatusFiles = \savedFileTags, files ->
     savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
-    context = List.walk savedFiledTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
+    context = List.walk savedFileTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
         byFilepath: Dict.insert byFilepath filepath tag,
         usedTags: Set.insert usedTags tag,
     }
-    filesState = { results: [], currentTag: initialTag }
-    List.walk files filesState \{ results, currentTag }, { filepath, status } ->
-        { tagValue, tagState } =
+    filesState = { currentFiles: [], currentTag: initialTag, allFiles: savedFileTags }
+    List.walk files filesState \{ currentFiles, currentTag, allFiles }, { filepath, status } ->
+        { tagValue, tagState, isNew } =
             when Dict.get context.byFilepath filepath is
-                Ok existing -> { tagValue: existing, tagState: currentTag }
+                Ok existing -> { tagValue: existing, tagState: currentTag, isNew: New }
                 Err KeyNotFound ->
                     newTag = firstUnusedTag currentTag context.usedTags
-                    { tagValue: newTag.str, tagState: newTag }
-        { results: List.append results { filepath, status, tag: tagValue }, currentTag: tagState }
-    |> .results
+                    { tagValue: newTag.str, tagState: newTag, isNew: Old }
+        newFile = { filepath, status, tag: tagValue }
+        newAllFiles = when isNew is
+            New -> List.append allFiles newFile
+            Old -> allFiles
+        { currentFiles: List.append currentFiles newFile, currentTag: tagState, allFiles: newAllFiles }
 
 displayBranches : { localBranch: GitBranch, remoteBranch: [None, Some GitBranch] }* -> Str
 displayBranches = \{ localBranch, remoteBranch } ->
@@ -133,6 +135,8 @@ firstUnusedTag = \currentTag, usedTags ->
     else
         firstUnusedTag newTag usedTags
 
+
+
 # X          Y     Meaning
 # -------------------------------------------------
 #          [AMD]   not updated
@@ -163,18 +167,3 @@ firstUnusedTag = \currentTag, usedTags ->
 
 # Add / changed
 # Delete / added
-
-# parseStatus : Str -> GitStatus
-# parseStatus = \str ->
-#    { before, after } = Str.splitFirst str "\n"
-
-getPath : Str -> Result Str [NotFound]
-getPath = \envVariables ->
-    Str.split envVariables "\n"
-        |> List.findFirst? \def -> Str.startsWith def "PATH"
-        |> takeAfter "="
-
-takeAfter : Str, Str -> Result Str [NotFound]
-takeAfter = \str, seperator ->
-    Str.splitFirst str seperator
-    |> Result.map .after

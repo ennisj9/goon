@@ -19,7 +19,6 @@ writeStadusFile = \files ->
 readStadusFile : Path -> Task FileTags [ReadFileErr Str, DecodeFileErr Str]
 readStadusFile = \dotGit ->
     filename = Str.concat (Path.display dotGit) "/stadus.json"
-    dbg filename
     decoded =
         File.readBytes filename
             |> Task.mapErr! \_ -> ReadFileErr "Coudn't read .git/stadus.json"
