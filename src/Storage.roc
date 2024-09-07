@@ -10,17 +10,17 @@ import pf.Path exposing [Path]
 
 FileTags : List { filepath : Str, tag : Str }
 
-stadusJsonStr : Path -> Str
+stadusJsonStr : Str -> Str
 stadusJsonStr = \dotGit ->
-    Str.concat (Path.display dotGit) "/stadus.json"
+    Str.concat dotGit "/stadus.json"
 
-writeStadusFile : Path, FileTags ->  Task {} [WriteFileErr Str]
+writeStadusFile : Str, FileTags ->  Task {} [WriteFileErr Str]
 writeStadusFile = \dotGit, files ->
     content = Encode.toBytes files Json.utf8
     File.writeBytes (stadusJsonStr dotGit) content
         |> Task.mapErr! \err -> WriteFileErr (Inspect.toStr err) #"Couldn't write .git/stadus.json"
 
-readStadusFile : Path -> Task FileTags [ReadFileErr Str, DecodeFileErr Str]
+readStadusFile : Str -> Task FileTags [ReadFileErr Str, DecodeFileErr Str]
 readStadusFile = \dotGit ->
     decoded =
         File.readBytes (stadusJsonStr dotGit)

@@ -13,7 +13,7 @@ import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
 import FileTag exposing [nextTag, initialTag, Tag]
 import Storage exposing [writeStadusFile, readStadusFile, FileTags]
-import GitEnvironment exposing [findGitFolderPath, findGitExecutablePath]
+import GitEnvironment exposing [getGitEnv]
 
 File : { filepath : Str, status : FileStatus, tag : Str }
 
@@ -27,9 +27,8 @@ File : { filepath : Str, status : FileStatus, tag : Str }
 #    |> Stdout.write
 
 main =
-    gitExec = findGitExecutablePath! {}
-    dotGit = findGitFolderPath! {}
-    runStatus! gitExec dotGit
+    gitEnv = getGitEnv! {}
+    runStatus! gitEnv
         |> Stdout.write
 
 
@@ -46,13 +45,13 @@ main =
 # status syncmain == git checkout main && git fetch main && git reset --hard
 
 
-runStatus = \git, dotGitPath ->
-    commitLogs = queryCommitLog! git
-    gitStatus = queryGitStatus! git
-    savedFileTags = Task.attempt! (readStadusFile dotGitPath) \res ->
+runStatus = \{dotGit , gitBin} ->
+    commitLogs = queryCommitLog! gitBin
+    gitStatus = queryGitStatus! gitBin
+    savedFileTags = Task.attempt! (readStadusFile dotGit) \res ->
         Task.ok (Result.withDefault res [])
     { currentFiles, allFiles } = tagStatusFiles savedFileTags gitStatus.files
-    writeStadusFile! dotGitPath allFiles
+    writeStadusFile! dotGit allFiles
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
     fileDisplay = displayFiles currentFiles
@@ -125,7 +124,7 @@ displayFiles = \files ->
                         second = Str.joinWith ["   ", workTreeLabel, filepath] " "
                         { state & mixed: List.concat state.mixed [first, second] }
     if List.isEmpty files then
-        "no changes"
+        Color.withFg  "no changes" (Standard Cyan)
     else
         join = \bucket -> Str.joinWith bucket "\n"
         join (List.dropIf [join staged, join mixed, join workTree] \x -> x == "")

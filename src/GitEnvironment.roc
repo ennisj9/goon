@@ -1,11 +1,17 @@
 module [
-    findGitFolderPath,
-    findGitExecutablePath
+    getGitEnv
 ]
 
 import pf.Path exposing [Path]
 import pf.Cmd
 import pf.Dir
+
+GitEnv : { dotGit: Str, gitBin: Str}
+
+getGitEnv = \{} ->
+    gitBin = findGitExecutablePath! {}
+    dotGit = findGitFolderPath! {}
+    Task.ok { gitBin, dotGit }
 
 findGitFolderPath = \{} ->
     Task.loop! { pathStr: "./", depth: 0 } \{ pathStr, depth } ->
@@ -16,7 +22,7 @@ findGitFolderPath = \{} ->
                 |> Path.listDir!
                 |> findDotGitInFileList
             when result is
-                Found path -> Task.ok (Done path)
+                Found path -> Task.ok (Done (Path.display path))
                 NotFound ->
                     next = { pathStr: (Str.concat pathStr "../"), depth: depth + 1 }
                     Task.ok (Step next)
