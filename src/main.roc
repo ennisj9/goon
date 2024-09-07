@@ -124,8 +124,11 @@ displayFiles = \files ->
                         first = Str.joinWith [printTag tag, indexLabel, filepath] " "
                         second = Str.joinWith ["   ", workTreeLabel, filepath] " "
                         { state & mixed: List.concat state.mixed [first, second] }
-    join = \bucket -> Str.joinWith bucket "\n"
-    join (List.dropIf [join staged, join mixed, join workTree] \x -> x == "")
+    if List.isEmpty files then
+        "no changes"
+    else
+        join = \bucket -> Str.joinWith bucket "\n"
+        join (List.dropIf [join staged, join mixed, join workTree] \x -> x == "")
 
 firstUnusedTag = \currentTag, usedTags ->
     newTag = nextTag currentTag
