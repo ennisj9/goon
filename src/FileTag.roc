@@ -1,6 +1,7 @@
 module [
     nextTag,
     initialTag,
+    Tag
 ]
 
 import random.Random

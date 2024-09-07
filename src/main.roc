@@ -11,7 +11,7 @@ import pf.Path
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
-import FileTag exposing [nextTag, initialTag]
+import FileTag exposing [nextTag, initialTag, Tag]
 import Storage exposing [writeStadusFile, readStadusFile, FileTags]
 import GitEnvironment exposing [findGitFolderPath, findGitExecutablePath]
 
@@ -29,9 +29,8 @@ File : { filepath : Str, status : FileStatus, tag : Str }
 main =
     gitExec = findGitExecutablePath! {}
     dotGit = findGitFolderPath! {}
-    status = runStatus! gitExec dotGit
-    Str.joinWith [gitExec, Path.display dotGit, status, "\n"] "\n"
-    |> Stdout.write
+    runStatus! gitExec dotGit
+        |> Stdout.write
 
 
 
@@ -52,8 +51,8 @@ runStatus = \git, dotGitPath ->
     gitStatus = queryGitStatus! git
     savedFileTags = Task.attempt! (readStadusFile dotGitPath) \res ->
         Task.ok (Result.withDefault res [])
-
     { currentFiles, allFiles } = tagStatusFiles savedFileTags gitStatus.files
+    writeStadusFile! dotGitPath allFiles
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
     fileDisplay = displayFiles currentFiles
@@ -61,7 +60,7 @@ runStatus = \git, dotGitPath ->
 
 
 
-tagStatusFiles : FileTags, List FileWithStatus -> {currentFiles: List File, allFiles: List File, currentTag: Tag}
+tagStatusFiles : FileTags, List FileWithStatus -> {currentFiles: List File, allFiles: FileTags, currentTag: Tag}
 tagStatusFiles = \savedFileTags, files ->
     savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
     context = List.walk savedFileTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
@@ -76,9 +75,9 @@ tagStatusFiles = \savedFileTags, files ->
                 Err KeyNotFound ->
                     newTag = firstUnusedTag currentTag context.usedTags
                     { tagValue: newTag.str, tagState: newTag, isNew: Old }
-        newFile = { filepath, status, tag: tagValue }
+        newFile = { filepath, tag: tagValue, status }
         newAllFiles = when isNew is
-            New -> List.append allFiles newFile
+            New -> List.append allFiles { filepath, tag: tagValue }
             Old -> allFiles
         { currentFiles: List.append currentFiles newFile, currentTag: tagState, allFiles: newAllFiles }
 
