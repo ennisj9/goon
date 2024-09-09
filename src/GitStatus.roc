@@ -18,13 +18,13 @@ FileWithStatus : { filepath : Str, status : FileStatus }
 
 callGitStatus = \git ->
     Cmd.new git
-        |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
-        |> Cmd.output
-        |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
-        |> .stdout
-        |> Str.fromUtf8
-        |> Result.withDefault ""
-        |> Task.ok
+    |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
+    |> Cmd.output
+    |> Task.mapErr! \CmdOutputError err -> GitStatusFailed (Cmd.outputErrToStr err)
+    |> .stdout
+    |> Str.fromUtf8
+    |> Result.withDefault ""
+    |> Task.ok
 
 queryGitStatus : Str -> Task GitStatus [GitStatusFailed Str]
 queryGitStatus = \git ->

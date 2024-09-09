@@ -1,5 +1,6 @@
 module [
     truncateStr,
+    taskWithDefault
 ]
 
 truncateStr = \str, maxLength -> # s
@@ -21,3 +22,8 @@ expect truncateStr "some text" 9 == "some text"
 expect truncateStr "some text" 7 == "some..."
 expect truncateStr "some text" 3 == "..."
 expect truncateStr "some text" 0 == "..."
+
+taskWithDefault : Task a b, a -> Task a c
+taskWithDefault = \task, default ->
+    Task.attempt! task \result ->
+        Task.ok (Result.withDefault result default)

@@ -8,31 +8,17 @@ app [main] {
 
 import pf.Stdout
 import pf.Path
+import pf.Arg
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
 import FileTag exposing [nextTag, initialTag, Tag]
-import Storage exposing [writeStadusFile, readStadusFile, FileTags]
+import Storage exposing [writeStadusFile, readStadusFile, FileAndTag]
 import GitEnvironment exposing [getGitEnv]
+import Util exposing [taskWithDefault]
+import Commands exposing [routeCommands]
 
 File : { filepath : Str, status : FileStatus, tag : Str }
-
-# main =
-#     queryGitStatus! gitExec
-#         |> Inspect.toStr
-#         |> Stdout.write
-#main =
-#    findGitFolderPath! {}
-#    |> Path.display
-#    |> Stdout.write
-
-main =
-    gitEnv = getGitEnv! {}
-    runStatus! gitEnv
-        |> Stdout.write
-
-
-
 
 # stadus
 # stadus discard <tag>  == git restore <file>
@@ -45,13 +31,24 @@ main =
 # status syncmain == git checkout main && git fetch main && git reset --hard
 
 
-runStatus = \{dotGit , gitBin} ->
+main =
+    gitEnv = getGitEnv! {}
+    savedFileTags = taskWithDefault! (readStadusFile gitEnv.dotGit) []
+    rawArgs = Arg.list! {}
+    args = List.dropFirst rawArgs 1
+    if List.isEmpty args then
+        runStatus! gitEnv savedFileTags
+            |> Stdout.write
+    else
+        routeCommands args gitEnv savedFileTags
+
+
+runStatus = \{dotGit , gitBin}, savedFileTags ->
     commitLogs = queryCommitLog! gitBin
     gitStatus = queryGitStatus! gitBin
-    savedFileTags = Task.attempt! (readStadusFile dotGit) \res ->
-        Task.ok (Result.withDefault res [])
-    { currentFiles, allFiles } = tagStatusFiles savedFileTags gitStatus.files
-    writeStadusFile! dotGit allFiles
+    currentFiles = tagStatusFiles savedFileTags gitStatus.files
+    newFileTags = List.map currentFiles \file -> { filepath: file.filepath, tag: file.tag }
+    writeStadusFile! dotGit newFileTags
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
     fileDisplay = displayFiles currentFiles
@@ -59,15 +56,15 @@ runStatus = \{dotGit , gitBin} ->
 
 
 
-tagStatusFiles : FileTags, List FileWithStatus -> {currentFiles: List File, allFiles: FileTags, currentTag: Tag}
+tagStatusFiles : List FileAndTag, List FileWithStatus -> List File
 tagStatusFiles = \savedFileTags, files ->
     savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
     context = List.walk savedFileTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
         byFilepath: Dict.insert byFilepath filepath tag,
         usedTags: Set.insert usedTags tag,
     }
-    filesState = { currentFiles: [], currentTag: initialTag, allFiles: savedFileTags }
-    List.walk files filesState \{ currentFiles, currentTag, allFiles }, { filepath, status } ->
+    filesState = { currentFiles: [], currentTag: initialTag }
+    List.walk files filesState \{ currentFiles, currentTag }, { filepath, status } ->
         { tagValue, tagState, isNew } =
             when Dict.get context.byFilepath filepath is
                 Ok existing -> { tagValue: existing, tagState: currentTag, isNew: New }
@@ -75,10 +72,8 @@ tagStatusFiles = \savedFileTags, files ->
                     newTag = firstUnusedTag currentTag context.usedTags
                     { tagValue: newTag.str, tagState: newTag, isNew: Old }
         newFile = { filepath, tag: tagValue, status }
-        newAllFiles = when isNew is
-            New -> List.append allFiles { filepath, tag: tagValue }
-            Old -> allFiles
-        { currentFiles: List.append currentFiles newFile, currentTag: tagState, allFiles: newAllFiles }
+        { currentFiles: List.append currentFiles newFile, currentTag: tagState }
+    |> .currentFiles
 
 displayBranches : { localBranch: GitBranch, remoteBranch: [None, Some GitBranch] }* -> Str
 displayBranches = \{ localBranch, remoteBranch } ->
