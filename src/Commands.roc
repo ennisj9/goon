@@ -5,21 +5,32 @@ module [
 import pf.Cmd
 import Storage exposing [FileAndTag]
 
-routeCommands = \args, gitEnv, savedFileTags  ->
+routeCommands = \args, gitEnv, appContext  ->
     rest = List.dropFirst args 1
     first = List.get args 0
         |> Result.withDefault ""
-    filepathsByTag = indexFileTags savedFileTags
+    filepathsByTag = indexFileTags appContext.files
     when args is
         ["add", ..] -> addCommand rest gitEnv filepathsByTag
         ["subtract", ..] -> subtractCommand rest gitEnv filepathsByTag
+        ["branches"] -> branchesCommand gitEnv
         _ -> Task.err (CmdError (Str.concat "Unrecognized command: " first))
 
 indexFileTags : List FileAndTag -> Dict Str Str
 indexFileTags = \savedFileTags ->
     List.walk savedFileTags (Dict.empty {}) \byTag, {filepath, tag} ->
-        newTags = Dict.insert byTag tag filepath
-        newTags
+        Dict.insert byTag tag filepath
+
+expect
+    files = [{filepath: "blah", tag: "a"}, {filepath: "foobar", tag: "b"}]
+    index = indexFileTags files
+    expected = Dict.fromList [("a","blah"),("b", "foobar")]
+    index == expected
+
+tagIndexFromList = \items, getter ->
+    List.walk items (Dict.empty {}) \byTag, item ->
+        value = getter item
+        Dict.insert byTag item.tag value
 
 tagsToFilepaths : Dict Str Str, List Str -> [Filepaths (List Str), Unrecognized (List Str)]
 tagsToFilepaths = \filepathsByTag, names ->
@@ -32,7 +43,9 @@ tagsToFilepaths = \filepathsByTag, names ->
     else
         Unrecognized inspected.unrecognized
 
+branchesCommand = \gitEnv ->
 
+    Task.ok (Output "blah")
 
 addCommand = \names, gitEnv, filepathsByTag ->
     when tagsToFilepaths filepathsByTag names is
@@ -41,10 +54,12 @@ addCommand = \names, gitEnv, filepathsByTag ->
             Cmd.new gitEnv.gitBin
                 |> Cmd.args args
                 |> Cmd.status
-                |> Task.mapErr \_ -> CmdError "Error executing git add command"
+                |> Task.mapErr! \_ -> CmdError "Error executing git add command"
+            Task.ok Silent
         Unrecognized unrecognizedNames ->
             namesStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " namesStr))
+
 
 subtractCommand = \names, gitEnv, filepathsByTag ->
     when tagsToFilepaths filepathsByTag names is
@@ -53,7 +68,8 @@ subtractCommand = \names, gitEnv, filepathsByTag ->
             Cmd.new gitEnv.gitBin
                 |> Cmd.args args
                 |> Cmd.status
-                |> Task.mapErr \_ -> CmdError "Error executing git subtract command"
+                |> Task.mapErr! \_ -> CmdError "Error executing git subtract command"
+            Task.ok Silent
         Unrecognized unrecognizedNames ->
             namesStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " namesStr))

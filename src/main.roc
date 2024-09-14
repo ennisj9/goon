@@ -13,7 +13,7 @@ import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
 import FileTag exposing [nextTag, initialTag, Tag]
-import Storage exposing [writeStadusFile, readStadusFile, FileAndTag]
+import Storage exposing [writeFileTags, readContextOrFresh, FileAndTag, AppContext, usedTagsFromContext]
 import GitEnvironment exposing [getGitEnv]
 import Util exposing [taskWithDefault]
 import Commands exposing [routeCommands]
@@ -33,22 +33,26 @@ File : { filepath : Str, status : FileStatus, tag : Str }
 
 main =
     gitEnv = getGitEnv! {}
-    savedFileTags = taskWithDefault! (readStadusFile gitEnv.dotGit) []
+    savedContext = readContextOrFresh! gitEnv.dotGit
     rawArgs = Arg.list! {}
     args = List.dropFirst rawArgs 1
     if List.isEmpty args then
-        runStatus! gitEnv savedFileTags
+        runStatus! gitEnv savedContext
             |> Stdout.write
     else
-        routeCommands args gitEnv savedFileTags
+        result = routeCommands! args gitEnv savedContext
+        when result is
+            Silent -> Task.ok {}
+            Output output ->
+                Stdout.write output
 
 
-runStatus = \{dotGit , gitBin}, savedFileTags ->
+runStatus = \{dotGit , gitBin}, savedContext ->
     commitLogs = queryCommitLog! gitBin
     gitStatus = queryGitStatus! gitBin
-    currentFiles = tagStatusFiles savedFileTags gitStatus.files
+    currentFiles = tagStatusFiles savedContext gitStatus.files
     newFileTags = List.map currentFiles \file -> { filepath: file.filepath, tag: file.tag }
-    writeStadusFile! dotGit newFileTags
+    writeFileTags! dotGit newFileTags
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
     fileDisplay = displayFiles currentFiles
@@ -56,24 +60,26 @@ runStatus = \{dotGit , gitBin}, savedFileTags ->
 
 
 
-tagStatusFiles : List FileAndTag, List FileWithStatus -> List File
-tagStatusFiles = \savedFileTags, files ->
+tagStatusFiles : AppContext, List FileWithStatus -> List File
+tagStatusFiles = \savedContext, files ->
     savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
-    context = List.walk savedFileTags savedInitial \{ byFilepath, usedTags }, { filepath, tag } -> {
-        byFilepath: Dict.insert byFilepath filepath tag,
-        usedTags: Set.insert usedTags tag,
-    }
+    usedTags = usedTagsFromContext savedContext
+    tagsByFilepath =
+        List.map savedContext.files \file -> (file.filepath, file.tag)
+        |> Dict.fromList
     filesState = { currentFiles: [], currentTag: initialTag }
     List.walk files filesState \{ currentFiles, currentTag }, { filepath, status } ->
-        { tagValue, tagState, isNew } =
-            when Dict.get context.byFilepath filepath is
-                Ok existing -> { tagValue: existing, tagState: currentTag, isNew: New }
+        { tagValue, tagState } =
+            when Dict.get tagsByFilepath filepath is
+                Ok existing -> { tagValue: existing, tagState: currentTag }
                 Err KeyNotFound ->
-                    newTag = firstUnusedTag currentTag context.usedTags
-                    { tagValue: newTag.str, tagState: newTag, isNew: Old }
+                    newTag = firstUnusedTag currentTag usedTags
+                    { tagValue: newTag.str, tagState: newTag }
         newFile = { filepath, tag: tagValue, status }
         { currentFiles: List.append currentFiles newFile, currentTag: tagState }
     |> .currentFiles
+
+
 
 displayBranches : { localBranch: GitBranch, remoteBranch: [None, Some GitBranch] }* -> Str
 displayBranches = \{ localBranch, remoteBranch } ->

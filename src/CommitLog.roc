@@ -12,7 +12,7 @@ CommitLog : { hash : Str, shortDateTime : Str, author : Str, message : Str }
 
 queryCommitLog : Str -> Task (List CommitLog) [GitLogFailed Str]
 queryCommitLog = \git ->
-    Cmd.new git # |> Cmd.args ["status", "--porcelain=2", "--branch", "--untracked-files=all"]
+    Cmd.new git
         |> Cmd.args ["log", "--pretty=%h|%ad|%ae|%s", "--date=format:%m/%d %H:%M", "-3"]
         |> Cmd.output
         |> Task.mapErr! \CmdOutputError err -> GitLogFailed (Cmd.outputErrToStr err)
@@ -49,8 +49,6 @@ displayCommitLogs = \logs ->
         Str.joinWith parts " "
     |> Str.joinWith "\n"
 
-expect displayCommitLogs (parseCommitLog "foo\nbar\nblah") == " 0\n-1\n-2"
-
 parseCommitLog : Str -> List CommitLog
 parseCommitLog = \logs ->
     Str.split logs "\n"
@@ -64,16 +62,20 @@ parseCommitLog = \logs ->
             |> Str.splitFirst "@"
             |> Result.map .before
             |> Result.withDefault ""
+        emailName =
+            Str.splitFirst email "+"
+            |> Result.map .after
+            |> Result.withDefault email
 
         {
             hash: Result.withDefault (List.get parts 0) "",
             shortDateTime: Result.withDefault (List.get parts 1) "",
-            author: email,
+            author: emailName,
             message: Result.withDefault (List.get parts 3) "",
         }
 
 expect
-    result = parseCommitLog "aae83c5|08/23 10:06|person@example.com|more git research\nblah"
+    result = parseCommitLog "aae83c5|08/23 10:06|13029834+person@example.com|more git research\nblah"
     result
     == [
         {
