@@ -18,7 +18,8 @@ routeCommands = \args, gitEnv, appContext  ->
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
         ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
         ["restore", ..] -> restoreCommand gitEnv filepathsByTag rest
-        ["branches"] -> branchesCommand gitEnv appContext
+        ["branches"] -> branchesCommand gitEnv appContext Default
+        ["branches", count] -> branchesCommand gitEnv appContext (Specific count)
         ["switch", tag] -> switchCommand gitEnv branchesByTag tag
         _ -> Task.err (CmdError (Str.concat "Unrecognized command: " first))
 
@@ -44,9 +45,13 @@ tagsToValues = \tagToValueMap, tags ->
     else
         Unrecognized inspected.unrecognized
 
-branchesCommand = \gitEnv, appContext ->
+branchesCommand = \gitEnv, appContext, countArg ->
     branches = queryGitBranches! gitEnv.gitBin
-    taggedBranches = tagBranches appContext branches
+    maxLength = when countArg is
+        Specific countStr -> Str.toU64 countStr |> Result.withDefault 5
+        Default -> 5
+    someBranches = List.takeFirst branches maxLength
+    taggedBranches = tagBranches appContext someBranches
     writeBranchTags! gitEnv.dotGit taggedBranches
     List.map taggedBranches \{tag, value} ->
         Str.joinWith [Color.withFg tag (Standard Yellow), " ", value] ""
