@@ -1,20 +1,27 @@
 module [
-    routeCommands
+    routeCommands,
 ]
 
 import pf.Cmd
 import ansi.Core as Color
 import Storage exposing [TaggedValue, writeBranchTags]
 import Branches exposing [queryGitBranches, tagBranches]
+import Status exposing [runStatus]
+import "help.txt" as helpText : Str
 
-routeCommands = \args, gitEnv, appContext  ->
+routeCommands = \args, gitEnv, appContext ->
     rest = List.dropFirst args 1
-    first = List.get args 0
+    first =
+        List.get args 0
         |> Result.withDefault ""
 
     branchesByTag = indexTags appContext.branches
     filepathsByTag = indexTags appContext.files
     when args is
+        ["--help"] -> Task.ok (Output helpText)
+        ["-h"] -> Task.ok (Output helpText)
+        ["list"] -> runStatus gitEnv appContext
+        ["status"] -> runStatus gitEnv appContext
         ["add", "."] -> addAllCommand gitEnv
         ["recommit"] -> recommitCommand gitEnv
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
@@ -27,14 +34,14 @@ routeCommands = \args, gitEnv, appContext  ->
 
 indexTags : List TaggedValue -> Dict Str Str
 indexTags = \savedFileTags ->
-    List.walk savedFileTags (Dict.empty {}) \byTag, {value, tag} ->
+    List.walk savedFileTags (Dict.empty {}) \byTag, { value, tag } ->
         Dict.insert byTag tag value
         |> Dict.insert value value
 
 expect
-    files = [{value: "blah", tag: "a"}, {value: "foobar", tag: "b"}]
+    files = [{ value: "blah", tag: "a" }, { value: "foobar", tag: "b" }]
     index = indexTags files
-    expected = Dict.fromList [("a","blah"),("b", "foobar")]
+    expected = Dict.fromList [("a", "blah"), ("b", "foobar")]
     index == expected
 
 tagsToValues : Dict Str Str, List Str -> [Values (List Str), Unrecognized (List Str)]
@@ -50,13 +57,14 @@ tagsToValues = \tagToValueMap, tags ->
 
 branchesCommand = \gitEnv, appContext, countArg ->
     branches = queryGitBranches! gitEnv.gitBin
-    maxLength = when countArg is
-        Specific countStr -> Str.toU64 countStr |> Result.withDefault 5
-        Default -> 5
+    maxLength =
+        when countArg is
+            Specific countStr -> Str.toU64 countStr |> Result.withDefault 5
+            Default -> 5
     someBranches = List.takeFirst branches maxLength
     taggedBranches = tagBranches appContext someBranches
     writeBranchTags! gitEnv.dotGit taggedBranches
-    List.map taggedBranches \{tag, value} ->
+    List.map taggedBranches \{ tag, value } ->
         Str.joinWith [Color.withFg tag (Standard Yellow), " ", value] ""
     |> Str.joinWith "\n"
     |> Output
@@ -71,6 +79,7 @@ switchCommand = \gitEnv, branchesByTag, tag ->
                 |> Cmd.status
                 |> Task.mapErr! \_ -> CmdError "Error executing git switch command"
             Task.ok Silent
+
         Err KeyNotFound ->
             Task.err (CmdError (Str.concat "Unrecognized branch tag: " tag))
 
@@ -83,6 +92,7 @@ addCommand = \gitEnv, filepathsByTag, tags ->
                 |> Cmd.status
                 |> Task.mapErr! \_ -> CmdError "Error executing git add command"
             Task.ok Silent
+
         Unrecognized unrecognizedNames ->
             tagsStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
@@ -110,6 +120,7 @@ subtractCommand = \gitEnv, filepathsByTag, tags ->
                 |> Cmd.status
                 |> Task.mapErr! \_ -> CmdError "Error executing git restore --staged command"
             Task.ok Silent
+
         Unrecognized unrecognizedNames ->
             tagsStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
@@ -123,6 +134,7 @@ restoreCommand = \gitEnv, filepathsByTag, tags ->
                 |> Cmd.status
                 |> Task.mapErr! \_ -> CmdError "Error executing git restore command"
             Task.ok Silent
+
         Unrecognized unrecognizedNames ->
             tagsStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))

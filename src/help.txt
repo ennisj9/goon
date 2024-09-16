@@ -1,0 +1,26 @@
+usage: goon <command> [<args>]
+
+Goon (or "Go on,") makes it easier to reference long filenames or branches while issuing git commands
+
+goon list
+    equivalent of 'git status', offers "tags" for each filename
+    (alias: `status`)
+
+good add [<tag> | .]
+    'git add' with tags replaced with corresponding file paths
+
+goon subtract [<tag>]
+    'git restore --staged' with tags replaced with corresponding file paths.
+    Removes file from staging/index.
+
+goon restore [<tag>]
+    'git restore' with tags replaced with corresponding file paths.
+    Re-checkouts file, discarding changes.
+
+goon branches <max_count>
+    `git branch --sort=-committerdate`, with "tags" for each branch.
+
+goon switch <tag>` - equivalent of `git switch <branch_name>` with tag replaced by branch
+
+goon recommit
+    shorthand for 'git commit --amend --no-edit'
