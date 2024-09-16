@@ -15,6 +15,8 @@ routeCommands = \args, gitEnv, appContext  ->
     branchesByTag = indexTags appContext.branches
     filepathsByTag = indexTags appContext.files
     when args is
+        ["add", "."] -> addAllCommand gitEnv
+        ["recommit"] -> recommitCommand gitEnv
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
         ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
         ["restore", ..] -> restoreCommand gitEnv filepathsByTag rest
@@ -27,6 +29,7 @@ indexTags : List TaggedValue -> Dict Str Str
 indexTags = \savedFileTags ->
     List.walk savedFileTags (Dict.empty {}) \byTag, {value, tag} ->
         Dict.insert byTag tag value
+        |> Dict.insert value value
 
 expect
     files = [{value: "blah", tag: "a"}, {value: "foobar", tag: "b"}]
@@ -84,6 +87,19 @@ addCommand = \gitEnv, filepathsByTag, tags ->
             tagsStr = Str.joinWith unrecognizedNames ", "
             Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
 
+addAllCommand = \gitEnv ->
+    Cmd.new gitEnv.gitBin
+        |> Cmd.args ["add", "."]
+        |> Cmd.status
+        |> Task.mapErr! \_ -> CmdError "Error executing git add ."
+    Task.ok Silent
+
+recommitCommand = \gitEnv ->
+    Cmd.new gitEnv.gitBin
+        |> Cmd.args ["commit", "--amend", "--no-edit"]
+        |> Cmd.status
+        |> Task.mapErr! \_ -> CmdError "Error executing git commit --amend --no-edit"
+    Task.ok Silent
 
 subtractCommand = \gitEnv, filepathsByTag, tags ->
     when tagsToValues filepathsByTag tags is
