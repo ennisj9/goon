@@ -17,6 +17,7 @@ routeCommands = \args, gitEnv, appContext  ->
     when args is
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
         ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
+        ["restore", ..] -> restoreCommand gitEnv filepathsByTag rest
         ["branches"] -> branchesCommand gitEnv appContext
         ["switch", tag] -> switchCommand gitEnv branchesByTag tag
         _ -> Task.err (CmdError (Str.concat "Unrecognized command: " first))
@@ -31,11 +32,6 @@ expect
     index = indexTags files
     expected = Dict.fromList [("a","blah"),("b", "foobar")]
     index == expected
-
-tagIndexFromList = \items, getter ->
-    List.walk items (Dict.empty {}) \byTag, item ->
-        value = getter item
-        Dict.insert byTag item.tag value
 
 tagsToValues : Dict Str Str, List Str -> [Values (List Str), Unrecognized (List Str)]
 tagsToValues = \tagToValueMap, tags ->
@@ -91,7 +87,20 @@ subtractCommand = \gitEnv, filepathsByTag, tags ->
             Cmd.new gitEnv.gitBin
                 |> Cmd.args args
                 |> Cmd.status
-                |> Task.mapErr! \_ -> CmdError "Error executing git subtract command"
+                |> Task.mapErr! \_ -> CmdError "Error executing git restore --staged command"
+            Task.ok Silent
+        Unrecognized unrecognizedNames ->
+            tagsStr = Str.joinWith unrecognizedNames ", "
+            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
+
+restoreCommand = \gitEnv, filepathsByTag, tags ->
+    when tagsToValues filepathsByTag tags is
+        Values filepaths ->
+            args = List.prepend filepaths "restore"
+            Cmd.new gitEnv.gitBin
+                |> Cmd.args args
+                |> Cmd.status
+                |> Task.mapErr! \_ -> CmdError "Error executing git restore command"
             Task.ok Silent
         Unrecognized unrecognizedNames ->
             tagsStr = Str.joinWith unrecognizedNames ", "
