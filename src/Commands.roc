@@ -3,27 +3,32 @@ module [
 ]
 
 import pf.Cmd
-import Storage exposing [FileAndTag]
+import ansi.Core as Color
+import Storage exposing [TaggedValue, writeBranchTags]
+import Branches exposing [queryGitBranches, tagBranches]
 
 routeCommands = \args, gitEnv, appContext  ->
     rest = List.dropFirst args 1
     first = List.get args 0
         |> Result.withDefault ""
-    filepathsByTag = indexFileTags appContext.files
+
+    branchesByTag = indexTags appContext.branches
+    filepathsByTag = indexTags appContext.files
     when args is
-        ["add", ..] -> addCommand rest gitEnv filepathsByTag
-        ["subtract", ..] -> subtractCommand rest gitEnv filepathsByTag
-        ["branches"] -> branchesCommand gitEnv
+        ["add", ..] -> addCommand gitEnv filepathsByTag rest
+        ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
+        ["branches"] -> branchesCommand gitEnv appContext
+        ["switch", tag] -> switchCommand gitEnv branchesByTag tag
         _ -> Task.err (CmdError (Str.concat "Unrecognized command: " first))
 
-indexFileTags : List FileAndTag -> Dict Str Str
-indexFileTags = \savedFileTags ->
-    List.walk savedFileTags (Dict.empty {}) \byTag, {filepath, tag} ->
-        Dict.insert byTag tag filepath
+indexTags : List TaggedValue -> Dict Str Str
+indexTags = \savedFileTags ->
+    List.walk savedFileTags (Dict.empty {}) \byTag, {value, tag} ->
+        Dict.insert byTag tag value
 
 expect
-    files = [{filepath: "blah", tag: "a"}, {filepath: "foobar", tag: "b"}]
-    index = indexFileTags files
+    files = [{value: "blah", tag: "a"}, {value: "foobar", tag: "b"}]
+    index = indexTags files
     expected = Dict.fromList [("a","blah"),("b", "foobar")]
     index == expected
 
@@ -32,24 +37,42 @@ tagIndexFromList = \items, getter ->
         value = getter item
         Dict.insert byTag item.tag value
 
-tagsToFilepaths : Dict Str Str, List Str -> [Filepaths (List Str), Unrecognized (List Str)]
-tagsToFilepaths = \filepathsByTag, names ->
-    inspected = List.walk names { unrecognized: [], filepaths: [] } \state, name ->
-        when Dict.get filepathsByTag name is
-            Ok filepath -> { state & filepaths: List.append state.filepaths filepath }
-            Err KeyNotFound -> { state & unrecognized: List.append state.unrecognized name }
+tagsToValues : Dict Str Str, List Str -> [Values (List Str), Unrecognized (List Str)]
+tagsToValues = \tagToValueMap, tags ->
+    inspected = List.walk tags { unrecognized: [], values: [] } \state, tag ->
+        when Dict.get tagToValueMap tag is
+            Ok value -> { state & values: List.append state.values value }
+            Err KeyNotFound -> { state & unrecognized: List.append state.unrecognized tag }
     if List.isEmpty inspected.unrecognized then
-        Filepaths inspected.filepaths
+        Values inspected.values
     else
         Unrecognized inspected.unrecognized
 
-branchesCommand = \gitEnv ->
+branchesCommand = \gitEnv, appContext ->
+    branches = queryGitBranches! gitEnv.gitBin
+    taggedBranches = tagBranches appContext branches
+    writeBranchTags! gitEnv.dotGit taggedBranches
+    List.map taggedBranches \{tag, value} ->
+        Str.joinWith [Color.withFg tag (Standard Yellow), " ", value] ""
+    |> Str.joinWith "\n"
+    |> Output
+    |> Task.ok
 
-    Task.ok (Output "blah")
+switchCommand = \gitEnv, branchesByTag, tag ->
+    when Dict.get branchesByTag tag is
+        Ok branch ->
+            args = ["switch", branch]
+            Cmd.new gitEnv.gitBin
+                |> Cmd.args args
+                |> Cmd.status
+                |> Task.mapErr! \_ -> CmdError "Error executing git switch command"
+            Task.ok Silent
+        Err KeyNotFound ->
+            Task.err (CmdError (Str.concat "Unrecognized branch tag: " tag))
 
-addCommand = \names, gitEnv, filepathsByTag ->
-    when tagsToFilepaths filepathsByTag names is
-        Filepaths filepaths ->
+addCommand = \gitEnv, filepathsByTag, tags ->
+    when tagsToValues filepathsByTag tags is
+        Values filepaths ->
             args = List.prepend filepaths "add"
             Cmd.new gitEnv.gitBin
                 |> Cmd.args args
@@ -57,13 +80,13 @@ addCommand = \names, gitEnv, filepathsByTag ->
                 |> Task.mapErr! \_ -> CmdError "Error executing git add command"
             Task.ok Silent
         Unrecognized unrecognizedNames ->
-            namesStr = Str.joinWith unrecognizedNames ", "
-            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " namesStr))
+            tagsStr = Str.joinWith unrecognizedNames ", "
+            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
 
 
-subtractCommand = \names, gitEnv, filepathsByTag ->
-    when tagsToFilepaths filepathsByTag names is
-        Filepaths filepaths ->
+subtractCommand = \gitEnv, filepathsByTag, tags ->
+    when tagsToValues filepathsByTag tags is
+        Values filepaths ->
             args = List.concat ["restore", "--staged"] filepaths
             Cmd.new gitEnv.gitBin
                 |> Cmd.args args
@@ -71,5 +94,5 @@ subtractCommand = \names, gitEnv, filepathsByTag ->
                 |> Task.mapErr! \_ -> CmdError "Error executing git subtract command"
             Task.ok Silent
         Unrecognized unrecognizedNames ->
-            namesStr = Str.joinWith unrecognizedNames ", "
-            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " namesStr))
+            tagsStr = Str.joinWith unrecognizedNames ", "
+            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))

@@ -2,8 +2,7 @@ module [
     writeFileTags,
     writeBranchTags,
     readContextOrFresh,
-    BranchAndTag,
-    FileAndTag,
+    TaggedValue,
     AppContext,
     usedTagsFromContext
 ]
@@ -11,13 +10,12 @@ module [
 import json.Json
 import pf.File
 
-FileAndTag : { filepath : Str, tag : Str }
-BranchAndTag : { branch : Str, tag : Str }
+TaggedValue : { tag : Str , value : Str }
 
 
 AppContext : {
-    files: List FileAndTag,
-    branches: List BranchAndTag
+    files: List TaggedValue,
+    branches: List TaggedValue
 }
 
 readContextOrFresh : Str -> Task AppContext []
@@ -35,13 +33,13 @@ commitToFile = \dotGit, payload ->
         |> Task.mapErr! \_ -> WriteFileErr "Couldn't write .git/stadus.json"
     Task.ok {}
 
-writeFileTags : Str, List FileAndTag -> Task {} [WriteFileErr Str]
+writeFileTags : Str, List TaggedValue -> Task {} [WriteFileErr Str]
 writeFileTags = \dotGit, files ->
     existing = readContextOrFresh! dotGit
     content = { existing & files: files }
     commitToFile dotGit content
 
-writeBranchTags : Str, List BranchAndTag -> Task {} [WriteFileErr Str]
+writeBranchTags : Str, List TaggedValue -> Task {} [WriteFileErr Str]
 writeBranchTags = \dotGit, branches ->
     existing = readContextOrFresh! dotGit
     content = { existing & branches: branches }
@@ -58,8 +56,8 @@ usedTagsFromContext = \appContext ->
 
 expect
     context = {
-        files: [{filepath: "Blah", tag: "a"},{filepath: "Foo", tag: "b"}],
-        branches: [{branch: "Bar", tag: "b"}, {branch: "Foo", tag: "c"}]
+        files: [{value: "Blah", tag: "a"},{value: "Foo", tag: "b"}],
+        branches: [{value: "Bar", tag: "b"}, {value: "Foo", tag: "c"}]
     }
     result = usedTagsFromContext context
     result == Set.fromList ["a","b","c"]

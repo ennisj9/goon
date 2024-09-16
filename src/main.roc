@@ -12,8 +12,8 @@ import pf.Arg
 import ansi.Core as Color
 import CommitLog exposing [queryCommitLog, displayCommitLogs]
 import GitStatus exposing [queryGitStatus, FileWithStatus, FileStatus, fileStateToLabel, GitBranch]
-import FileTag exposing [nextTag, initialTag, Tag]
-import Storage exposing [writeFileTags, readContextOrFresh, FileAndTag, AppContext, usedTagsFromContext]
+import FileTag exposing [nextTag, initialTag, Tag, firstUnusedTag]
+import Storage exposing [writeFileTags, readContextOrFresh, AppContext, usedTagsFromContext]
 import GitEnvironment exposing [getGitEnv]
 import Util exposing [taskWithDefault]
 import Commands exposing [routeCommands]
@@ -44,14 +44,14 @@ main =
         when result is
             Silent -> Task.ok {}
             Output output ->
-                Stdout.write output
+                Stdout.write (Str.concat output "\n")
 
 
 runStatus = \{dotGit , gitBin}, savedContext ->
     commitLogs = queryCommitLog! gitBin
     gitStatus = queryGitStatus! gitBin
     currentFiles = tagStatusFiles savedContext gitStatus.files
-    newFileTags = List.map currentFiles \file -> { filepath: file.filepath, tag: file.tag }
+    newFileTags = List.map currentFiles \file -> { value: file.filepath, tag: file.tag }
     writeFileTags! dotGit newFileTags
     branchDisplay = displayBranches gitStatus
     logDisplay = displayCommitLogs commitLogs
@@ -62,10 +62,9 @@ runStatus = \{dotGit , gitBin}, savedContext ->
 
 tagStatusFiles : AppContext, List FileWithStatus -> List File
 tagStatusFiles = \savedContext, files ->
-    savedInitial = { byFilepath: Dict.empty {}, usedTags: Set.empty {} }
     usedTags = usedTagsFromContext savedContext
     tagsByFilepath =
-        List.map savedContext.files \file -> (file.filepath, file.tag)
+        List.map savedContext.files \file -> (file.value, file.tag)
         |> Dict.fromList
     filesState = { currentFiles: [], currentTag: initialTag }
     List.walk files filesState \{ currentFiles, currentTag }, { filepath, status } ->
@@ -118,7 +117,6 @@ displayFiles = \files ->
                     Unchanged ->
                         str = Str.joinWith [printTag tag, indexLabel, filepath] " "
                         { state & staged: List.append state.staged str }
-
                     _ ->
                         workTreeLabel = Color.withFg (fileStateToLabel status.workTreeState) (Standard Yellow)
                         first = Str.joinWith [printTag tag, indexLabel, filepath] " "
@@ -130,12 +128,7 @@ displayFiles = \files ->
         join = \bucket -> Str.joinWith bucket "\n"
         join (List.dropIf [join staged, join mixed, join workTree] \x -> x == "")
 
-firstUnusedTag = \currentTag, usedTags ->
-    newTag = nextTag currentTag
-    if !(Set.contains usedTags newTag.str) then
-        newTag
-    else
-        firstUnusedTag newTag usedTags
+
 
 
 

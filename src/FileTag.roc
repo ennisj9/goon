@@ -1,7 +1,8 @@
 module [
     nextTag,
     initialTag,
-    Tag
+    Tag,
+    firstUnusedTag
 ]
 
 import random.Random
@@ -45,3 +46,11 @@ nextTag = \lastName ->
                 |> Result.withDefault ""
             |> Str.joinWith ""
         {lastName & str, seed: newSeed}
+
+firstUnusedTag : Tag, Set Str -> Tag
+firstUnusedTag = \currentTag, usedTags ->
+    newTag = nextTag currentTag
+    if !(Set.contains usedTags newTag.str) then
+        newTag
+    else
+        firstUnusedTag newTag usedTags
