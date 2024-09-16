@@ -20,7 +20,12 @@ goon restore [<tag>]
 goon branches <max_count>
     `git branch --sort=-committerdate`, with "tags" for each branch.
 
-goon switch <tag>` - equivalent of `git switch <branch_name>` with tag replaced by branch
+goon switch <tag>
+    equivalent of `git switch <branch_name>` with tag replaced by branch
+
+goon commit [<word>]
+    e.g. 'goon commit my message here' is equivalent to
+    'git commit -m "my message here"'
 
 goon recommit
     shorthand for 'git commit --amend --no-edit'

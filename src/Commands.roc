@@ -23,6 +23,7 @@ routeCommands = \args, gitEnv, appContext ->
         ["list"] -> runStatus gitEnv appContext
         ["status"] -> runStatus gitEnv appContext
         ["add", "."] -> addAllCommand gitEnv
+        ["commit", ..] -> commitCommand gitEnv rest
         ["recommit"] -> recommitCommand gitEnv
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
         ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
@@ -102,6 +103,14 @@ addAllCommand = \gitEnv ->
         |> Cmd.args ["add", "."]
         |> Cmd.status
         |> Task.mapErr! \_ -> CmdError "Error executing git add ."
+    Task.ok Silent
+
+commitCommand = \gitEnv, words ->
+    args = ["commit", "-m", Str.joinWith words " "]
+    Cmd.new gitEnv.gitBin
+        |> Cmd.args args
+        |> Cmd.status
+        |> Task.mapErr! \_ -> CmdError "Error executing git commit -m command"
     Task.ok Silent
 
 recommitCommand = \gitEnv ->
