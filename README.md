@@ -10,7 +10,7 @@ Git CLI tool to make it easier to reference long filenames or branches
 - `goon restore <tag>` (...` <tag>`) - `git restore` with tags replaced with file paths. Re-checkouts file, discarding changes.
 
 ## Branches
-- `goon branches <max_count>` - equivalent to `git branch --sort=-committerdate`, with "tags" offered for each branch.
+- `goon branches <max_count>` - equivalent to `git branch --sort=-committerdate`, with "tags" offered for each branch. Defaults to a max count of 5.
 - `goon switch <tag>` - equivalent to `git switch <branch_name>` with tag replaced by branch
 
 ## Commits
