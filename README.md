@@ -8,6 +8,7 @@ Git CLI tool to make it easier to reference long filenames or branches
 - `good add <tag>` (...` <tag>`) - `git add` with tags replaced with file paths
 - `goon subtract <tag>` (...` <tag>`) - `git restore --staged` with tags replaced with file paths. Removes file from staging/index.
 - `goon restore <tag>` (...` <tag>`) - `git restore` with tags replaced with file paths. Re-checkouts file, discarding changes.
+- `goon rm <tag>` (...` <tag>`) - `/bin/rm` with tags replaced with file paths.
 
 ## Branches
 - `goon branches <max_count>` - equivalent to `git branch --sort=-committerdate`, with "tags" offered for each branch. Defaults to a max count of 5.

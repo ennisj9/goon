@@ -17,6 +17,10 @@ goon restore [<tag>]
     'git restore' with tags replaced with corresponding file paths.
     Re-checkouts file, discarding changes.
 
+goon rm [<tag>]
+    '/bin/rm' with tags replaced with corresponding file paths.
+    Removes files.
+
 goon branches <max_count>
     `git branch --sort=-committerdate`, with "tags" for each branch.
 

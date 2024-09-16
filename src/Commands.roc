@@ -28,6 +28,7 @@ routeCommands = \args, gitEnv, appContext ->
         ["add", ..] -> addCommand gitEnv filepathsByTag rest
         ["subtract", ..] -> subtractCommand gitEnv filepathsByTag rest
         ["restore", ..] -> restoreCommand gitEnv filepathsByTag rest
+        ["rm", ..] -> removeCommand filepathsByTag rest
         ["branches"] -> branchesCommand gitEnv appContext Default
         ["branches", count] -> branchesCommand gitEnv appContext (Specific count)
         ["switch", tag] -> switchCommand gitEnv branchesByTag tag
@@ -142,6 +143,19 @@ restoreCommand = \gitEnv, filepathsByTag, tags ->
                 |> Cmd.args args
                 |> Cmd.status
                 |> Task.mapErr! \_ -> CmdError "Error executing git restore command"
+            Task.ok Silent
+
+        Unrecognized unrecognizedNames ->
+            tagsStr = Str.joinWith unrecognizedNames ", "
+            Task.err (CmdError (Str.concat "Unrecognized filepath tags: " tagsStr))
+
+removeCommand = \filepathsByTag, tags ->
+    when tagsToValues filepathsByTag tags is
+        Values filepaths ->
+            Cmd.new "rm"
+                |> Cmd.args filepaths
+                |> Cmd.status
+                |> Task.mapErr! \_ -> CmdError "Error executing rm command"
             Task.ok Silent
 
         Unrecognized unrecognizedNames ->
